@@ -23,6 +23,10 @@ Route::middleware('auth')->group(function () {
     Route::resource('categories', CategoryController::class);
 });
 
+Route::get('/admin', function () {
+    return 'Halaman Admin';
+})->middleware('role:admin')->name('admin');
+
 Route::get('/', function () {
     return auth()->check()
         ? redirect()->route('dashboard')

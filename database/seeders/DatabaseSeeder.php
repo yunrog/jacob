@@ -18,13 +18,18 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::firstOrCreate(
+        $admin = User::firstOrCreate(
             ['email' => 'admin@jacob.test'],
             [
                 'name' => 'Admin',
                 'password' => Hash::make('admin123'),
+                'role' => 'admin',
             ]
         );
+
+        if ($admin->role !== 'admin') {
+            $admin->update(['role' => 'admin']);
+        }
 
         $brands = ['Samsung', 'Apple', 'Sony', 'Canon'];
         foreach ($brands as $brand) {
