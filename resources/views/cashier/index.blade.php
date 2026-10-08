@@ -11,15 +11,32 @@
     <div class="pos-shell">
         <header class="pos-header">
             <div>
-                <a class="brand-link" href="{{ route('dashboard') }}">MENIA</a>
+                <a class="brand-link" href="{{ auth()->user()->role === 'admin' ? route('dashboard') : route('cashier.index') }}">MENIA</a>
                 <div class="store-info">jalan menia km 7</div>
             </div>
+            <nav class="pos-nav" aria-label="Menu kasir">
+                @if (auth()->user()->role === 'admin')
+                    <a href="{{ route('dashboard') }}">Dashboard</a>
+                @endif
+                <a href="{{ route('cashier.index') }}" aria-current="page">Kasir</a>
+                <a href="{{ route('products.index') }}">Daftar Barang</a>
+                <a class="pos-nav-add" href="{{ route('products.create', ['return_to' => 'cashier']) }}">+ Tambah Barang</a>
+                <form action="{{ route('logout') }}" method="POST" class="pos-logout">
+                    @csrf
+                    <button type="submit">Keluar</button>
+                </form>
+            </nav>
             <div class="transaction-info">
                 <span>No. Transaksi</span>
-                <strong id="transactionNumber">TRX-{{ now()->format('Ymd') }}-001</strong>
+                <strong id="transactionNumber">TRX-{{ now()->format('Ymd') }}-DRAFT</strong>
                 <time id="currentDate"></time>
             </div>
         </header>
+
+        <div class="cashier-status" id="cashierStatus" role="status" aria-live="polite" hidden></div>
+        @if (session('success'))
+            <div class="cashier-status success">{{ session('success') }}</div>
+        @endif
 
         <main class="pos-main">
             <section class="workspace">
@@ -38,15 +55,21 @@
                         </div>
                         <button class="button button-primary" id="searchButton" type="button">Cari</button>
                     </div>
+                    @if ($products->isEmpty())
+                        <p class="no-stock">Belum ada barang dengan stok tersedia. <a href="{{ route('products.create', ['return_to' => 'cashier']) }}">Tambah barang</a> terlebih dahulu.</p>
+                    @endif
                     <div class="customer-grid">
-                        <label> Pelanggan
+                        <label for="customerType">Jenis Pelanggan
                             <select id="customerType">
                                 <option>Umum</option>
                                 <option>Pelanggan Member</option>
                                 <option>Member VIP</option>
                             </select>
                         </label>
-                        <label>No. Member / HP
+                        <label for="customerName">Nama Pelanggan
+                            <input type="text" id="customerName" maxlength="120" placeholder="Nama pelanggan (opsional)" autocomplete="name">
+                        </label>
+                        <label for="customerContact">No. Member / HP
                             <input type="text" id="customerContact" placeholder="Opsional">
                         </label>
                     </div>
@@ -122,6 +145,7 @@
 
     <script>
         window.cashierProducts = @json($products);
+        window.cashierSaleUrl = @json(route('cashier.sales.store'));
     </script>
     <script src="{{ asset('js/cashier.js') }}"></script>
 </body>

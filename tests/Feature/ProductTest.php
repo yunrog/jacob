@@ -22,6 +22,7 @@ class ProductTest extends TestCase
             'name' => 'Admin',
             'email' => 'admin@jacob.test',
             'password' => Hash::make('admin123'),
+            'role' => 'admin',
         ]);
     }
 
@@ -78,7 +79,7 @@ class ProductTest extends TestCase
             'stock' => 15,
         ]);
         $this->assertDatabaseHas('products', [
-            'image' => 'products/' . basename(Product::first()->image),
+            'image' => 'products/'.basename(Product::first()->image),
         ]);
     }
 

@@ -61,13 +61,21 @@ class ProductController extends Controller
             'category_id' => ['nullable', 'exists:categories,id'],
             'brand_id' => ['nullable', 'exists:brands,id'],
             'description' => ['nullable', 'string'],
+            'return_to' => ['nullable', 'in:cashier'],
         ]);
+
+        $returnToCashier = ($validated['return_to'] ?? null) === 'cashier';
+        unset($validated['return_to']);
 
         if ($request->hasFile('image')) {
             $validated['image'] = $request->file('image')->store('products', 'public');
         }
 
         Product::create($validated);
+
+        if ($returnToCashier) {
+            return redirect()->route('cashier.index')->with('success', 'Barang berhasil ditambahkan dan siap dijual.');
+        }
 
         return redirect()->route('products.index')->with('success', 'Product created successfully.');
     }

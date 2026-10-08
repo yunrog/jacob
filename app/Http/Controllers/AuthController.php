@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
 
 class AuthController extends Controller
 {
@@ -24,7 +24,11 @@ class AuthController extends Controller
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
 
-            return redirect()->intended(route('products.index'));
+            $destination = $request->user()->role === 'kasir'
+                ? route('cashier.index')
+                : route('dashboard');
+
+            return redirect()->intended($destination);
         }
 
         return back()->withErrors([

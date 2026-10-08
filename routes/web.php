@@ -6,6 +6,7 @@ use App\Http\Controllers\BrandController;
 use App\Http\Controllers\CashierController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ReceiptController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -15,20 +16,28 @@ Route::middleware('guest')->group(function () {
 
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-Route::middleware('auth')->group(function () {
-    Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+Route::middleware(['auth', 'role:admin,kasir'])->group(function () {
     Route::get('/cashier', [CashierController::class, 'index'])->name('cashier.index');
-    Route::resource('products', ProductController::class);
-    Route::resource('brands', BrandController::class);
-    Route::resource('categories', CategoryController::class);
+    Route::post('/cashier/sales', [CashierController::class, 'store'])->name('cashier.sales.store');
+    Route::get('/cashier/sales/{sale}/receipt', [ReceiptController::class, 'show'])->name('cashier.sales.receipt');
+    Route::resource('products', ProductController::class)->only(['index', 'create', 'store']);
 });
 
-Route::get('/admin', function () {
-    return 'Halaman Admin';
-})->middleware('role:admin')->name('admin');
+Route::middleware(['auth', 'role:admin'])->group(function () {
+    Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+    Route::resource('products', ProductController::class)->except(['index', 'create', 'store']);
+    Route::resource('brands', BrandController::class);
+    Route::resource('categories', CategoryController::class);
+
+    Route::get('/admin', fn () => redirect()->route('dashboard'))->name('admin');
+});
 
 Route::get('/', function () {
-    return auth()->check()
-        ? redirect()->route('dashboard')
-        : redirect()->route('login');
+    if (! auth()->check()) {
+        return redirect()->route('login');
+    }
+
+    return auth()->user()->role === 'kasir'
+        ? redirect()->route('cashier.index')
+        : redirect()->route('dashboard');
 });

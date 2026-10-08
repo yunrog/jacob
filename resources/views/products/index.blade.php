@@ -38,8 +38,11 @@
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
                 <h2 class="h4 mb-0 fw-bold">Products</h2>
                 <div class="d-flex gap-2">
-                    <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Dashboard</a>
-                    <a href="{{ route('products.create') }}" class="btn btn-primary">+ Add Product</a>
+                    @if (auth()->user()->role === 'admin')
+                        <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Dashboard</a>
+                    @endif
+                    <a href="{{ route('cashier.index') }}" class="btn btn-outline-primary">Kasir POS</a>
+                    <a href="{{ route('products.create', auth()->user()->role === 'kasir' ? ['return_to' => 'cashier'] : []) }}" class="btn btn-primary">+ Add Product</a>
                 </div>
             </div>
 
@@ -62,7 +65,9 @@
                             <th>Brand</th>
                             <th>Price</th>
                             <th>Stock</th>
-                            <th>Actions</th>
+                            @if (auth()->user()->role === 'admin')
+                                <th>Actions</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -80,21 +85,23 @@
                                 <td>{{ $product->brand?->name ?? '-' }}</td>
                                 <td>Rp {{ number_format($product->price, 0, ',', '.') }}</td>
                                 <td>{{ $product->stock }}</td>
-                                <td>
-                                    <div class="d-flex gap-2 flex-wrap">
-                                        <a href="{{ route('products.show', $product) }}" class="btn btn-sm btn-outline-primary">View</a>
-                                        <a href="{{ route('products.edit', $product) }}" class="btn btn-sm btn-warning">Edit</a>
-                                        <form action="{{ route('products.destroy', $product) }}" method="POST" onsubmit="return confirm('Delete this product?')">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                                        </form>
-                                    </div>
-                                </td>
+                                @if (auth()->user()->role === 'admin')
+                                    <td>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <a href="{{ route('products.show', $product) }}" class="btn btn-sm btn-outline-primary">View</a>
+                                            <a href="{{ route('products.edit', $product) }}" class="btn btn-sm btn-warning">Edit</a>
+                                            <form action="{{ route('products.destroy', $product) }}" method="POST" onsubmit="return confirm('Delete this product?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                @endif
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="empty-state">No products found for this filter.</td>
+                                <td colspan="{{ auth()->user()->role === 'admin' ? 7 : 6 }}" class="empty-state">No products found for this filter.</td>
                             </tr>
                         @endforelse
                     </tbody>

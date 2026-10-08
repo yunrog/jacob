@@ -31,6 +31,19 @@ class DatabaseSeeder extends Seeder
             $admin->update(['role' => 'admin']);
         }
 
+        $cashier = User::firstOrCreate(
+            ['email' => 'kasir@jacob.test'],
+            [
+                'name' => 'Kasir',
+                'password' => Hash::make('kasir123'),
+                'role' => 'kasir',
+            ]
+        );
+
+        if ($cashier->role !== 'kasir') {
+            $cashier->update(['role' => 'kasir']);
+        }
+
         $brands = ['Samsung', 'Apple', 'Sony', 'Canon'];
         foreach ($brands as $brand) {
             Brand::firstOrCreate([

@@ -10,8 +10,20 @@
     const searchInput = $('searchProduct');
     const resultBox = $('productResults');
     const cartBody = $('cartBody');
+    const statusBox = $('cashierStatus');
     const formatRupiah = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Math.max(0, value));
     const numberValue = (id) => Number.parseFloat($(id).value) || 0;
+
+    function showStatus(message, type = 'error') {
+        statusBox.textContent = message;
+        statusBox.className = `cashier-status ${type}`;
+        statusBox.hidden = false;
+    }
+
+    function hideStatus() {
+        statusBox.hidden = true;
+        statusBox.textContent = '';
+    }
 
     function getGrandTotal() {
         const subtotal = state.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -116,12 +128,85 @@
         state.cart = [];
         $('payment').value = '';
         ['discountPercent', 'discountAmount', 'tax', 'otherFee'].forEach((id) => { $(id).value = 0; });
+        $('customerType').value = 'Umum';
+        $('customerName').value = '';
+        $('customerContact').value = '';
+        state.paymentMethod = 'Tunai';
+        document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('active', item.dataset.method === 'Tunai'));
+        $('transactionNumber').textContent = `TRX-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-DRAFT`;
+        hideStatus();
         renderCart();
+    }
+
+    async function completeSale() {
+        if (!state.cart.length) {
+            showStatus('Keranjang masih kosong.');
+            return;
+        }
+
+        const button = $('payButton');
+        button.disabled = true;
+        button.textContent = 'MEMPROSES...';
+        hideStatus();
+
+        try {
+            const response = await fetch(window.cashierSaleUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({
+                    items: state.cart.map((item) => ({ id: item.id, qty: item.qty })),
+                    discount_percent: numberValue('discountPercent'),
+                    discount_amount: numberValue('discountAmount'),
+                    tax: numberValue('tax'),
+                    other_fee: numberValue('otherFee'),
+                    amount_paid: numberValue('payment'),
+                    payment_method: state.paymentMethod,
+                    customer_type: $('customerType').value,
+                    customer_name: $('customerName').value.trim() || null,
+                    customer_contact: $('customerContact').value.trim() || null,
+                }),
+            });
+            const result = await response.json();
+
+            if (!response.ok) {
+                const message = result.errors ? Object.values(result.errors).flat()[0] : result.message;
+                throw new Error(message || 'Transaksi gagal diproses.');
+            }
+
+            state.heldTransactions = state.heldTransactions.filter((transaction) => transaction.number !== result.sale.transaction_number);
+            localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
+            window.location.assign(result.sale.receipt_url);
+        } catch (error) {
+            showStatus(error.message || 'Tidak dapat menyimpan transaksi. Silakan coba lagi.');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = 'BAYAR &amp; CETAK';
+        }
     }
 
     function holdTransaction() {
         if (!state.cart.length) return window.alert('Tidak ada transaksi untuk ditahan.');
-        state.heldTransactions.push({ id: Date.now(), number: $('transactionNumber').textContent, cart: state.cart, total: getGrandTotal(), customer: $('customerType').value });
+        state.heldTransactions.push({
+            id: Date.now(),
+            number: $('transactionNumber').textContent,
+            cart: state.cart.map((item) => ({ ...item })),
+            total: getGrandTotal(),
+            customer: $('customerType').value,
+            customerName: $('customerName').value,
+            customerContact: $('customerContact').value,
+            paymentMethod: state.paymentMethod,
+            payment: $('payment').value,
+            adjustments: {
+                discountPercent: $('discountPercent').value,
+                discountAmount: $('discountAmount').value,
+                tax: $('tax').value,
+                otherFee: $('otherFee').value,
+            },
+        });
         localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
         resetTransaction();
         updateHeldIndicator();
@@ -134,7 +219,7 @@
     }
 
     function renderHeldList() {
-        $('heldList').innerHTML = state.heldTransactions.length ? state.heldTransactions.map((transaction) => `<div class="held-entry"><div><strong>${transaction.number}</strong><small>${transaction.cart.reduce((sum, item) => sum + item.qty, 0)} item &bull; ${formatRupiah(transaction.total)}</small></div><button type="button" class="button button-primary" data-resume-id="${transaction.id}">Lanjutkan</button></div>`).join('') : '<p class="product-code">Belum ada transaksi yang ditahan.</p>';
+        $('heldList').innerHTML = state.heldTransactions.length ? state.heldTransactions.map((transaction) => `<div class="held-entry"><div><strong>${escapeHtml(transaction.number)}</strong><small>${transaction.cart.reduce((sum, item) => sum + item.qty, 0)} item &bull; ${formatRupiah(transaction.total)}</small></div><button type="button" class="button button-primary" data-resume-id="${transaction.id}">Lanjutkan</button></div>`).join('') : '<p class="product-code">Belum ada transaksi yang ditahan.</p>';
     }
 
     function resumeTransaction(id) {
@@ -144,6 +229,15 @@
         state.heldTransactions = state.heldTransactions.filter((entry) => entry.id !== transaction.id);
         localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
         $('customerType').value = transaction.customer;
+        $('customerName').value = transaction.customerName || '';
+        $('customerContact').value = transaction.customerContact || '';
+        $('payment').value = transaction.payment || '';
+        $('discountPercent').value = transaction.adjustments?.discountPercent || 0;
+        $('discountAmount').value = transaction.adjustments?.discountAmount || 0;
+        $('tax').value = transaction.adjustments?.tax || 0;
+        $('otherFee').value = transaction.adjustments?.otherFee || 0;
+        state.paymentMethod = transaction.paymentMethod || 'Tunai';
+        document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('active', item.dataset.method === state.paymentMethod));
         renderCart();
         updateHeldIndicator();
         $('heldDialog').close();
@@ -167,7 +261,7 @@
     $('paymentMethods').addEventListener('click', (event) => { const button = event.target.closest('[data-method]'); if (!button) return; state.paymentMethod = button.dataset.method; document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('active', item === button)); });
     $('holdButton').addEventListener('click', holdTransaction);
     $('cancelButton').addEventListener('click', () => { if (state.cart.length && window.confirm('Batalkan transaksi ini?')) resetTransaction(); });
-    $('payButton').addEventListener('click', () => { const total = getGrandTotal(); const payment = numberValue('payment'); if (!state.cart.length) return window.alert('Keranjang masih kosong.'); if (payment < total) return window.alert('Uang pembayaran masih kurang.'); window.alert(`Pembayaran berhasil!\n\nTotal: ${formatRupiah(total)}\nBayar: ${formatRupiah(payment)}\nKembali: ${formatRupiah(payment - total)}\nMetode: ${state.paymentMethod}`); window.print(); resetTransaction(); });
+    $('payButton').addEventListener('click', completeSale);
     $('resumeHeld').addEventListener('click', () => { renderHeldList(); $('heldDialog').showModal(); });
     $('closeHeld').addEventListener('click', () => $('heldDialog').close());
     $('heldList').addEventListener('click', (event) => { const button = event.target.closest('[data-resume-id]'); if (button) resumeTransaction(button.dataset.resumeId); });

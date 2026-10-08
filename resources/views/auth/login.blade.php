@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login</title>
+    <title>Login - Sistem Kasir</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -73,8 +73,8 @@
 <body>
     <div class="container">
         <div class="card">
-            <h1>Admin Login</h1>
-            <div class="subtitle">Welcome back</div>
+            <h1>Login Sistem</h1>
+            <div class="subtitle">Masuk sebagai admin atau kasir</div>
 
             @if($errors->any())
                 <div class="error" style="margin-bottom: 16px;">
