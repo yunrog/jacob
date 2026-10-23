@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Book;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -52,5 +53,21 @@ class BookApiTest extends TestCase
         $this->postJson('/api/books', ['description' => 'Tanpa judul'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('title');
+    }
+
+    public function test_user_endpoint_requires_authentication(): void
+    {
+        $this->getJson('/api/user')->assertUnauthorized();
+    }
+
+    public function test_authenticated_user_can_access_user_endpoint(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('id', $user->id)
+            ->assertJsonPath('email', $user->email);
     }
 }
