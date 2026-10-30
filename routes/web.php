@@ -8,6 +8,9 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReceiptController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\OrderController;
+
+Route::get('/orders/{order}/invoice', [OrderController::class, 'invoice'])->name('orders.invoice');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');

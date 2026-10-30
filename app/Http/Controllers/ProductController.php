@@ -2,141 +2,78 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Brand;
-use App\Models\Category;
 use App\Models\Product;
-use Illuminate\Http\RedirectResponse;
+use App\Models\Category;
+use App\Models\Brand;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\View\View;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 
 class ProductController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index(Request $request): View
+    // Menampilkan daftar produk
+    public function index()
     {
-        $search = trim((string) $request->input('search', ''));
-
-        $products = Product::with(['category', 'brand'])
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($innerQuery) use ($search) {
-                    $innerQuery->where('name', 'like', "%{$search}%")
-                        ->orWhere('description', 'like', "%{$search}%")
-                        ->orWhereHas('category', function ($categoryQuery) use ($search) {
-                            $categoryQuery->where('name', 'like', "%{$search}%");
-                        })
-                        ->orWhereHas('brand', function ($brandQuery) use ($search) {
-                            $brandQuery->where('name', 'like', "%{$search}%");
-                        });
-                });
-            })
-            ->latest()->get();
-
-        return view('products.index', compact('products', 'search'));
+        $products = Product::latest()->paginate(10);
+        return view('products.index', compact('products'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create(): View
+    // Menampilkan form tambah produk
+    public function create()
     {
-        return view('products.create', [
-            'categories' => Category::all(),
-            'brands' => Brand::all(),
-        ]);
+        $categories = Category::all();
+        $brands = Brand::all(); // Mengambil data brand untuk view create
+        return view('products.create', compact('categories', 'brands'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request): RedirectResponse
+    // Menyimpan data produk & memproses gambar (Acara 29)
+    public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'price' => ['required', 'numeric', 'min:0'],
-            'stock' => ['required', 'integer', 'min:0'],
-            'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
-            'category_id' => ['nullable', 'exists:categories,id'],
-            'brand_id' => ['nullable', 'exists:brands,id'],
-            'description' => ['nullable', 'string'],
-            'return_to' => ['nullable', 'in:cashier'],
+        // 1. Validasi Input Form
+        $data = $request->validate([
+            'name'        => 'required|string|max:255',
+            'category_id' => 'nullable|exists:categories,id',
+            'brand_id'    => 'nullable|exists:brands,id',
+            'sku'         => 'required|string|max:100|unique:products,sku',
+            'price'       => 'required|numeric',
+            'stock'       => 'required|integer',
+            'description' => 'nullable|string',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        $returnToCashier = ($validated['return_to'] ?? null) === 'cashier';
-        unset($validated['return_to']);
+        $file = $request->file('image');
 
-        if ($request->hasFile('image')) {
-            $validated['image'] = $request->file('image')->store('products', 'public');
-        }
+        // 2. Manipulasi Gambar Menggunakan Intervention Image
+        if ($file) {
+            $original = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $ext = strtolower($file->getClientOriginalExtension());
+            $filename = time() . '_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $original) . '.' . $ext;
+            $folder = 'products';
+            $path = $folder . '/' . $filename;
 
-        Product::create($validated);
+            // Inisialisasi ImageManager dengan GD Driver
+            $manager = new ImageManager(Driver::class);
 
-        if ($returnToCashier) {
-            return redirect()->route('cashier.index')->with('success', 'Barang berhasil ditambahkan dan siap dijual.');
-        }
+            // Resize & Crop Gambar ke 800x800
+            $image = $manager->read($file->getRealPath())->cover(800, 800);
 
-        return redirect()->route('products.index')->with('success', 'Product created successfully.');
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(Product $product): View
-    {
-        $product->load(['category', 'brand']);
-
-        return view('products.show', compact('product'));
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Product $product): View
-    {
-        return view('products.edit', [
-            'product' => $product,
-            'categories' => Category::all(),
-            'brands' => Brand::all(),
-        ]);
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Product $product): RedirectResponse
-    {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'price' => ['required', 'numeric', 'min:0'],
-            'stock' => ['required', 'integer', 'min:0'],
-            'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
-            'category_id' => ['nullable', 'exists:categories,id'],
-            'brand_id' => ['nullable', 'exists:brands,id'],
-            'description' => ['nullable', 'string'],
-        ]);
-
-        if ($request->hasFile('image')) {
-            if ($product->image && Storage::disk('public')->exists($product->image)) {
-                Storage::disk('public')->delete($product->image);
+            // Encode Format Gambar
+            if ($ext === 'png') {
+                $encoded = $image->toPng();
+            } else {
+                $encoded = $image->toJpeg(85);
             }
 
-            $validated['image'] = $request->file('image')->store('products', 'public');
+            // Simpan ke storage public
+            Storage::disk('public')->put($path, (string) $encoded);
+
+            $data['image'] = $path;
         }
 
-        $product->update($validated);
+        // 3. Simpan Data ke Database
+        Product::create($data);
 
-        return redirect()->route('products.index')->with('success', 'Product updated successfully.');
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Product $product): RedirectResponse
-    {
-        $product->delete();
-
-        return redirect()->route('products.index')->with('success', 'Product deleted successfully.');
+        return redirect()->route('products.index')->with('success', 'Produk berhasil ditambahkan!');
     }
 }
