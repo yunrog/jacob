@@ -10,6 +10,8 @@ use App\Http\Controllers\ReceiptController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\OrderController;
 
+Route::get('/print-kopi-kita', [ReceiptController::class, 'printKopiKita']);
+Route::get('/print-receipt', [ReceiptController::class, 'print']);
 Route::get('/orders/{order}/invoice', [OrderController::class, 'invoice'])->name('orders.invoice');
 
 Route::middleware('guest')->group(function () {

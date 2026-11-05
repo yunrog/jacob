@@ -35,7 +35,6 @@ class ProductController extends Controller
             'name'        => 'required|string|max:255',
             'category_id' => 'nullable|exists:categories,id',
             'brand_id'    => 'nullable|exists:brands,id',
-            'sku'         => 'required|string|max:100|unique:products,sku',
             'price'       => 'required|numeric',
             'stock'       => 'required|integer',
             'description' => 'nullable|string',

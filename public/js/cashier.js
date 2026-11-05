@@ -4,6 +4,7 @@
         cart: [],
         paymentMethod: 'Tunai',
         heldTransactions: JSON.parse(localStorage.getItem('cashierHeldTransactions') || '[]'),
+        activeHeldId: null,
     };
 
     const $ = (id) => document.getElementById(id);
@@ -48,6 +49,7 @@
         $('grandTotal').textContent = formatRupiah(getGrandTotal());
         renderQuickPayments();
         updateChange();
+        persistActiveTransaction();
     }
 
     function renderCart() {
@@ -126,6 +128,7 @@
 
     function resetTransaction() {
         state.cart = [];
+        state.activeHeldId = null;
         $('payment').value = '';
         ['discountPercent', 'discountAmount', 'tax', 'otherFee'].forEach((id) => { $(id).value = 0; });
         $('customerType').value = 'Umum';
@@ -144,6 +147,7 @@
             return;
         }
 
+        persistActiveTransaction();
         const button = $('payButton');
         button.disabled = true;
         button.textContent = 'MEMPROSES...';
@@ -177,7 +181,10 @@
                 throw new Error(message || 'Transaksi gagal diproses.');
             }
 
-            state.heldTransactions = state.heldTransactions.filter((transaction) => transaction.number !== result.sale.transaction_number);
+            if (state.activeHeldId !== null) {
+                state.heldTransactions = state.heldTransactions.filter((transaction) => transaction.id !== state.activeHeldId);
+                state.activeHeldId = null;
+            }
             localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
             window.location.assign(result.sale.receipt_url);
         } catch (error) {
@@ -190,8 +197,73 @@
 
     function holdTransaction() {
         if (!state.cart.length) return window.alert('Tidak ada transaksi untuk ditahan.');
-        state.heldTransactions.push({
-            id: Date.now(),
+        const transaction = {
+            id: state.activeHeldId ?? Date.now(),
+            number: $('transactionNumber').textContent,
+            cart: state.cart.map((item) => ({ ...item })),
+            total: getGrandTotal(),
+            customer: $('customerType').value,
+            customerName: $('customerName').value,
+            customerContact: $('customerContact').value,
+            paymentMethod: state.paymentMethod,
+            payment: $('payment').value,
+            adjustments: {
+                discountPercent: $('discountPercent').value,
+                discountAmount: $('discountAmount').value,
+                tax: $('tax').value,
+                otherFee: $('otherFee').value,
+            },
+        };
+        const existingIndex = state.heldTransactions.findIndex((entry) => entry.id === transaction.id);
+        if (existingIndex === -1) {
+            state.heldTransactions.push(transaction);
+        } else {
+            state.heldTransactions[existingIndex] = transaction;
+        }
+        localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
+        resetTransaction();
+        updateHeldIndicator();
+        window.alert('Transaksi berhasil ditahan.');
+    }
+
+    function updateHeldIndicator() {
+        $('heldBar').hidden = state.heldTransactions.length === 0;
+        $('heldCount').textContent = `${state.heldTransactions.length} transaksi`;
+    }
+
+    function renderHeldList() {
+        const availableTransactions = state.heldTransactions.filter((transaction) => transaction.id !== state.activeHeldId);
+        $('heldList').innerHTML = availableTransactions.length ? availableTransactions.map((transaction) => `<div class="held-entry"><div><strong>${escapeHtml(transaction.number)}</strong><small>${transaction.cart.reduce((sum, item) => sum + item.qty, 0)} item &bull; ${formatRupiah(transaction.total)}</small></div><button type="button" class="button button-primary" data-resume-id="${transaction.id}">Lanjutkan</button></div>`).join('') : '<p class="product-code">Tidak ada transaksi lain yang ditahan.</p>';
+    }
+
+    function resumeTransaction(id) {
+        const transaction = state.heldTransactions.find((entry) => entry.id === Number(id));
+        if (!transaction) return;
+        state.cart = transaction.cart;
+        state.activeHeldId = transaction.id;
+        $('transactionNumber').textContent = transaction.number;
+        $('customerType').value = transaction.customer;
+        $('customerName').value = transaction.customerName || '';
+        $('customerContact').value = transaction.customerContact || '';
+        $('payment').value = transaction.payment || '';
+        $('discountPercent').value = transaction.adjustments?.discountPercent || 0;
+        $('discountAmount').value = transaction.adjustments?.discountAmount || 0;
+        $('tax').value = transaction.adjustments?.tax || 0;
+        $('otherFee').value = transaction.adjustments?.otherFee || 0;
+        state.paymentMethod = transaction.paymentMethod || 'Tunai';
+        document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('active', item.dataset.method === state.paymentMethod));
+        renderCart();
+        updateHeldIndicator();
+        $('heldDialog').close();
+    }
+
+    function persistActiveTransaction() {
+        if (state.activeHeldId === null) return;
+
+        const transaction = state.heldTransactions.find((entry) => entry.id === state.activeHeldId);
+        if (!transaction) return;
+
+        Object.assign(transaction, {
             number: $('transactionNumber').textContent,
             cart: state.cart.map((item) => ({ ...item })),
             total: getGrandTotal(),
@@ -208,39 +280,7 @@
             },
         });
         localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
-        resetTransaction();
         updateHeldIndicator();
-        window.alert('Transaksi berhasil ditahan.');
-    }
-
-    function updateHeldIndicator() {
-        $('heldBar').hidden = state.heldTransactions.length === 0;
-        $('heldCount').textContent = `${state.heldTransactions.length} transaksi`;
-    }
-
-    function renderHeldList() {
-        $('heldList').innerHTML = state.heldTransactions.length ? state.heldTransactions.map((transaction) => `<div class="held-entry"><div><strong>${escapeHtml(transaction.number)}</strong><small>${transaction.cart.reduce((sum, item) => sum + item.qty, 0)} item &bull; ${formatRupiah(transaction.total)}</small></div><button type="button" class="button button-primary" data-resume-id="${transaction.id}">Lanjutkan</button></div>`).join('') : '<p class="product-code">Belum ada transaksi yang ditahan.</p>';
-    }
-
-    function resumeTransaction(id) {
-        const transaction = state.heldTransactions.find((entry) => entry.id === Number(id));
-        if (!transaction) return;
-        state.cart = transaction.cart;
-        state.heldTransactions = state.heldTransactions.filter((entry) => entry.id !== transaction.id);
-        localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
-        $('customerType').value = transaction.customer;
-        $('customerName').value = transaction.customerName || '';
-        $('customerContact').value = transaction.customerContact || '';
-        $('payment').value = transaction.payment || '';
-        $('discountPercent').value = transaction.adjustments?.discountPercent || 0;
-        $('discountAmount').value = transaction.adjustments?.discountAmount || 0;
-        $('tax').value = transaction.adjustments?.tax || 0;
-        $('otherFee').value = transaction.adjustments?.otherFee || 0;
-        state.paymentMethod = transaction.paymentMethod || 'Tunai';
-        document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('active', item.dataset.method === state.paymentMethod));
-        renderCart();
-        updateHeldIndicator();
-        $('heldDialog').close();
     }
 
     searchInput.addEventListener('input', showResults);
@@ -255,12 +295,21 @@
     cartBody.addEventListener('click', (event) => { const target = event.target.closest('[data-action]'); if (!target) return; const id = target.dataset.id; if (target.dataset.action === 'increase') adjustQuantity(id, 1); if (target.dataset.action === 'decrease') adjustQuantity(id, -1); if (target.dataset.action === 'remove') { state.cart = state.cart.filter((item) => item.id !== Number(id)); renderCart(); } });
     cartBody.addEventListener('change', (event) => { if (event.target.dataset.action === 'set-quantity') updateQuantity(event.target.dataset.id, event.target.value); });
     ['discountPercent', 'discountAmount', 'tax', 'otherFee'].forEach((id) => $(id).addEventListener('input', calculateTotal));
-    $('payment').addEventListener('input', updateChange);
-    $('quickPayments').addEventListener('click', (event) => { const button = event.target.closest('[data-payment]'); if (button) { $('payment').value = button.dataset.payment; updateChange(); } });
-    $('exactPayment').addEventListener('click', () => { $('payment').value = getGrandTotal(); updateChange(); });
-    $('paymentMethods').addEventListener('click', (event) => { const button = event.target.closest('[data-method]'); if (!button) return; state.paymentMethod = button.dataset.method; document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('active', item === button)); });
+    $('payment').addEventListener('input', () => { updateChange(); persistActiveTransaction(); });
+    $('quickPayments').addEventListener('click', (event) => { const button = event.target.closest('[data-payment]'); if (button) { $('payment').value = button.dataset.payment; updateChange(); persistActiveTransaction(); } });
+    $('exactPayment').addEventListener('click', () => { $('payment').value = getGrandTotal(); updateChange(); persistActiveTransaction(); });
+    $('paymentMethods').addEventListener('click', (event) => { const button = event.target.closest('[data-method]'); if (!button) return; state.paymentMethod = button.dataset.method; document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('active', item === button)); persistActiveTransaction(); });
+    ['customerType', 'customerName', 'customerContact'].forEach((id) => $(id).addEventListener('input', persistActiveTransaction));
     $('holdButton').addEventListener('click', holdTransaction);
-    $('cancelButton').addEventListener('click', () => { if (state.cart.length && window.confirm('Batalkan transaksi ini?')) resetTransaction(); });
+    $('cancelButton').addEventListener('click', () => {
+        if ((!state.cart.length && state.activeHeldId === null) || !window.confirm('Batalkan transaksi ini?')) return;
+        if (state.activeHeldId !== null) {
+            state.heldTransactions = state.heldTransactions.filter((transaction) => transaction.id !== state.activeHeldId);
+            localStorage.setItem('cashierHeldTransactions', JSON.stringify(state.heldTransactions));
+        }
+        resetTransaction();
+        updateHeldIndicator();
+    });
     $('payButton').addEventListener('click', completeSale);
     $('resumeHeld').addEventListener('click', () => { renderHeldList(); $('heldDialog').showModal(); });
     $('closeHeld').addEventListener('click', () => $('heldDialog').close());

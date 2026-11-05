@@ -56,6 +56,9 @@ class CashierTest extends TestCase
         $this->get(route('products.create', ['return_to' => 'cashier']))
             ->assertOk()
             ->assertSee('name="return_to" value="cashier"', false)
+            ->assertSee('name="name"', false)
+            ->assertSee('name="price"', false)
+            ->assertSee('name="stock"', false)
             ->assertSee('Simpan Barang');
     }
 
@@ -64,7 +67,6 @@ class CashierTest extends TestCase
         $response = $this->actingAs(User::factory()->create(['role' => 'kasir']))
             ->post(route('products.store'), [
                 'name' => 'Beras Premium',
-                'sku' => 'BERAS-PREMIUM',
                 'price' => 75000,
                 'stock' => 8,
                 'return_to' => 'cashier',
