@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="{{ asset('css/cashier.css') }}">
 </head>
 <body>
+    @include('partials.order-notifications')
+
     <div class="pos-shell">
         <header class="pos-header">
             <div>

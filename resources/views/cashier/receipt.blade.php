@@ -50,6 +50,8 @@
     </style>
 </head>
 <body>
+    @include('partials.order-notifications')
+
     <main class="receipt">
         <header class="center">
             <h1>MENIA</h1>

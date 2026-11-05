@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Events\OrderPlaced;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class CashierTest extends TestCase
@@ -38,6 +40,8 @@ class CashierTest extends TestCase
         $response->assertOk()
             ->assertSee('Kasir Retail POS')
             ->assertSee('Indomie Goreng')
+            ->assertSee('order-notification-list', false)
+            ->assertSee('.order.placed', false)
             ->assertDontSee('Out of Stock Product');
     }
 
@@ -60,6 +64,7 @@ class CashierTest extends TestCase
         $response = $this->actingAs(User::factory()->create(['role' => 'kasir']))
             ->post(route('products.store'), [
                 'name' => 'Beras Premium',
+                'sku' => 'BERAS-PREMIUM',
                 'price' => 75000,
                 'stock' => 8,
                 'return_to' => 'cashier',
@@ -86,6 +91,7 @@ class CashierTest extends TestCase
             'price' => 3500,
             'stock' => 12,
         ]);
+        Event::fake([OrderPlaced::class]);
 
         $response = $this->actingAs($user)->postJson('/cashier/sales', [
             'items' => [['id' => $product->id, 'qty' => 2]],
@@ -120,6 +126,35 @@ class CashierTest extends TestCase
             'quantity' => 2,
             'subtotal' => 7000,
         ]);
+        Event::assertDispatched(OrderPlaced::class, function (OrderPlaced $event) use ($user): bool {
+            $sale = Sale::query()->firstOrFail();
+
+            return $event->user->is($user)
+                && $event->broadcastOn()->name === "private-user.{$user->id}"
+                && $event->broadcastWith() === [
+                    'order_id' => $sale->id,
+                    'total' => $sale->total,
+                    'user_name' => $user->name,
+                ];
+        });
+    }
+
+    public function test_cashier_can_only_authorize_their_own_order_notifications(): void
+    {
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $otherCashier = User::factory()->create(['role' => 'kasir']);
+
+        $this->actingAs($cashier)
+            ->postJson('/broadcasting/auth', [
+                'socket_id' => '123.456',
+                'channel_name' => "private-user.{$cashier->id}",
+            ])
+            ->assertOk();
+
+        $this->postJson('/broadcasting/auth', [
+            'socket_id' => '123.456',
+            'channel_name' => "private-user.{$otherCashier->id}",
+        ])->assertForbidden();
     }
 
     public function test_cashier_can_open_only_their_own_printable_receipt(): void

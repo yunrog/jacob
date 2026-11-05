@@ -3,37 +3,41 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Events\OrderPlaced;
+use App\Models\User;
 
 class OrderController extends Controller
 {
-    public function invoice($id)
+    /**
+     * Menampilkan halaman dashboard
+     */
+    public function index()
     {
-        // Buat objek dummy/mock data invoice secara langsung tanpa query ke database
-        $invoice = (object) [
-            'id' => $id,
-            'created_at' => now(),
-            'total' => 150000,
-            'items' => collect([
-                (object) [
-                    'product' => (object) ['name' => 'Sepatu Casual Sneaker'],
-                    'price' => 100000,
-                    'quantity' => 1,
-                    'total' => 100000,
-                ],
-                (object) [
-                    'product' => (object) ['name' => 'Kaos Polos Cotton Combed'],
-                    'price' => 50000,
-                    'quantity' => 1,
-                    'total' => 50000,
-                ]
-            ])
+        return view('dashboard');
+    }
+
+    /**
+     * Memproses pembentukan transaksi dan memicu Event Broadcast (Langkah 2 BKPM)
+     */
+    public function store(Request $request)
+    {
+        // 1. Simulasi data transaksi (Order)
+        $order = (object)[
+            'id'    => rand(100, 999),
+            'total' => $request->total ?? 150000
         ];
 
-        // Generate PDF dari view invoices.invoice
-        $pdf = Pdf::loadView('invoices.invoice', ['invoice' => $invoice]);
+        // 2. Ambil user yang sedang login atau fallback ke User pertama
+        $user = auth()->user() ?? User::first() ?? (object)['id' => 1, 'name' => 'Admin'];
 
-        // Unduh file PDF
-        return $pdf->download('invoice_' . $id . '.pdf');
+        // 3. Panggil (Trigger) Event OrderPlaced ke Reverb
+        event(new OrderPlaced($order, $user));
+
+        // 4. Return respon JSON
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Transaksi berhasil disimpan & event dipicu!',
+            'order'   => $order
+        ]);
     }
 }

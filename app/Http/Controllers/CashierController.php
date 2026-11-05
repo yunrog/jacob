@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\OrderPlaced;
 use App\Models\Product;
 use App\Models\Sale;
 use Illuminate\Http\JsonResponse;
@@ -137,6 +138,8 @@ class CashierController extends Controller
 
             return $sale->load('items');
         });
+
+        event(new OrderPlaced($sale, $request->user()));
 
         return response()->json([
             'sale' => [

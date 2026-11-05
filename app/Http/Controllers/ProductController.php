@@ -74,6 +74,11 @@ class ProductController extends Controller
         // 3. Simpan Data ke Database
         Product::create($data);
 
+        if ($request->input('return_to') === 'cashier') {
+            return redirect()->route('cashier.index')
+                ->with('success', 'Barang berhasil ditambahkan dan siap dijual.');
+        }
+
         return redirect()->route('products.index')->with('success', 'Produk berhasil ditambahkan!');
     }
 }
